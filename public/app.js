@@ -253,11 +253,11 @@ function renderCorrectionPreview(essay, data) {
   let cursor = 0;
   matches.forEach((match, index) => {
     html += escapeHtml(essay.slice(cursor, match.index));
-    html += `
-      <span class="correction-token" role="button" tabindex="0" data-correction-id="${escapeHtml(match.id)}" aria-label="Xem gợi ý sửa lỗi ${index + 1}">
-        <del>${escapeHtml(match.original)}</del><ins>${escapeHtml(match.suggestion)}</ins>
-        <span class="correction-note" title="${escapeHtml(match.reason || match.type)}">[${index + 1}]</span>
-      </span>`;
+    html += `<span class="correction-token" role="button" tabindex="0" data-correction-id="${escapeHtml(
+      match.id
+    )}" aria-label="Xem gợi ý sửa lỗi ${index + 1}"><del>${escapeHtml(match.original)}</del><ins>${escapeHtml(
+      match.suggestion
+    )}</ins><span class="correction-note" title="${escapeHtml(match.reason || match.type)}">[${index + 1}]</span></span>`;
     cursor = match.index + match.original.length;
   });
   html += escapeHtml(essay.slice(cursor));
