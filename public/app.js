@@ -180,6 +180,7 @@ function renderAssessment(data) {
   els.graScore.textContent = formatBand(gra.score);
 
   const cards = [
+    criterionAnalysisCard(data.criterionAnalysis),
     diagnosticsCard(data),
     correctionsCard(data.corrections || []),
     criterionCard(els.trLabel.textContent, tr),
@@ -438,20 +439,104 @@ function diagnosticsCard(data) {
   `;
 }
 
+function criterionAnalysisCard(analysis) {
+  if (!analysis) return "";
+  const weakestItems = Array.isArray(analysis.weakestSubcriteria) ? analysis.weakestSubcriteria : [];
+  const ranking = Array.isArray(analysis.ranking) ? analysis.ranking : [];
+  if (!analysis.summary && !analysis.weakestCriterion && !weakestItems.length && !ranking.length) return "";
+
+  return `
+    <article class="feedback-card criterion-analysis-card">
+      <h3>Tiêu chí yếu nhất: ${escapeHtml(analysis.weakestCriterion || "n/a")}</h3>
+      <p>${escapeHtml(analysis.summary || "")}</p>
+      ${
+        weakestItems.length
+          ? `<p><span class="tag">!</span><strong>Các tiêu chí phụ yếu nhất</strong></p>
+            <ul>
+              ${weakestItems
+                .map(
+                  item => `
+                    <li>
+                      <strong>${escapeHtml(item.name || "")}</strong>
+                      ${item.evidence ? `<p>Bằng chứng: ${escapeHtml(item.evidence)}</p>` : ""}
+                      <p>${escapeHtml(item.whyItHurts || "")}</p>
+                      <p><strong>Cách sửa:</strong> ${escapeHtml(item.fix || "")}</p>
+                    </li>
+                  `
+                )
+                .join("")}
+            </ul>`
+          : ""
+      }
+      ${
+        ranking.length
+          ? `<p><span class="tag">#</span><strong>Xếp hạng 4 tiêu chí</strong></p>
+            <ul>
+              ${ranking
+                .map(
+                  item => `
+                    <li>
+                      <strong>${escapeHtml(item.criterion || "")}: ${formatBand(item.score)}</strong>
+                      <p>${escapeHtml(item.reason || "")}</p>
+                    </li>
+                  `
+                )
+                .join("")}
+            </ul>`
+          : ""
+      }
+    </article>
+  `;
+}
+
 function criterionCard(label, item) {
   if (!item) return "";
   const strengths = listItems(item.strengths || []);
   const improvements = listItems(item.improvements || []);
+  const subcriteria = Array.isArray(item.subcriteria) ? item.subcriteria : [];
   return `
     <article class="feedback-card">
       <h3>${escapeHtml(item.title || label)}: ${formatBand(item.score)}</h3>
       <p>${escapeHtml(item.summary || "")}</p>
+      ${
+        subcriteria.length
+          ? `<p><span class="tag">?</span><strong>Tiêu chí phụ</strong></p>
+            <ul>
+              ${subcriteria
+                .map(
+                  subitem => `
+                    <li>
+                      <strong>${escapeHtml(subitem.name || "")}</strong>
+                      <span class="subcriterion-status ${subcriterionStatusClass(subitem.status)}">${subcriterionStatusLabel(
+                        subitem.status
+                      )}</span>
+                      <p>${escapeHtml(subitem.evidence || "")}</p>
+                      <p>${escapeHtml(subitem.impact || "")}</p>
+                    </li>
+                  `
+                )
+                .join("")}
+            </ul>`
+          : ""
+      }
       <p><span class="tag">+</span><strong>Điểm tốt</strong></p>
       <ul>${strengths}</ul>
       <p><span class="tag">!</span><strong>Cần sửa</strong></p>
       <ul>${improvements}</ul>
     </article>
   `;
+}
+
+function subcriterionStatusClass(status) {
+  const value = String(status || "mixed").toLowerCase();
+  return ["strong", "mixed", "weak"].includes(value) ? value : "mixed";
+}
+
+function subcriterionStatusLabel(status) {
+  const value = subcriterionStatusClass(status);
+  if (value === "strong") return "tốt";
+  if (value === "weak") return "yếu";
+  return "chưa ổn định";
 }
 
 function listCard(title, items) {

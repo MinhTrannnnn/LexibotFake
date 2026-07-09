@@ -132,6 +132,9 @@ function buildSystemPrompt(aiLanguage) {
     "Be sensitive to real quality differences: frequent grammar, word form, collocation, agreement, awkward phrasing, or copied correction markup must reduce LR and GRA.",
     "If the essay contains correction markup such as wrongright joined together, duplicated alternatives, labels, or non-essay notes, treat those as submitted text unless the inputNote says a cleaned corrected section was extracted.",
     "Use IELTS public band descriptors for Task Response/Task Achievement, Coherence and Cohesion, Lexical Resource, and Grammatical Range and Accuracy.",
+    "For each of the four IELTS criteria, give criterion-specific feedback instead of generic advice. Mention concrete evidence from this essay and explain why that evidence affects the band.",
+    "Break each criterion into its most relevant subcriteria and mark which subcriteria are strongest or weakest. Examples: position, idea development, prompt coverage, paragraphing, logical progression, referencing, vocabulary range, collocation, word form, sentence variety, agreement, tense, punctuation, and error density.",
+    "Identify the single weakest IELTS criterion, then list the 2-4 weakest subcriteria inside it. The weakest criterion must be based on the score and the evidence, not on a generic preference.",
     "Return practical feedback in the requested feedback language: " + aiLanguage + ".",
     "Keep scores realistic. Use half-band increments from 0 to 9.",
     "For Task 1, label the first criterion as Task Achievement (TA). For Task 2, label it as Task Response (TR).",
@@ -146,15 +149,33 @@ function assessmentSchema() {
   const criterion = {
     type: "object",
     additionalProperties: false,
-    required: ["score", "title", "summary", "strengths", "improvements"],
+    required: ["score", "title", "summary", "subcriteria", "strengths", "improvements"],
     properties: {
       score: { type: "number", minimum: 0, maximum: 9 },
       title: { type: "string" },
       summary: { type: "string" },
+      subcriteria: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["name", "status", "evidence", "impact"],
+          properties: {
+            name: { type: "string" },
+            status: { type: "string", enum: ["strong", "mixed", "weak"] },
+            evidence: { type: "string" },
+            impact: { type: "string" }
+          }
+        },
+        minItems: 3,
+        maxItems: 5
+      },
       strengths: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 4 },
       improvements: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 5 }
     }
   };
+
+  const criterionLabel = { type: "string", enum: ["TR", "TA", "CC", "LR", "GRA"] };
 
   return {
     type: "object",
@@ -167,6 +188,7 @@ function assessmentSchema() {
       "warnings",
       "diagnostics",
       "criteria",
+      "criterionAnalysis",
       "corrections",
       "priorityFixes",
       "detailedFeedback",
@@ -200,6 +222,47 @@ function assessmentSchema() {
           CC: criterion,
           LR: criterion,
           GRA: criterion
+        }
+      },
+      criterionAnalysis: {
+        type: "object",
+        additionalProperties: false,
+        required: ["summary", "weakestCriterion", "weakestSubcriteria", "ranking"],
+        properties: {
+          summary: { type: "string" },
+          weakestCriterion: criterionLabel,
+          weakestSubcriteria: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["criterion", "name", "evidence", "whyItHurts", "fix"],
+              properties: {
+                criterion: criterionLabel,
+                name: { type: "string" },
+                evidence: { type: "string" },
+                whyItHurts: { type: "string" },
+                fix: { type: "string" }
+              }
+            },
+            minItems: 2,
+            maxItems: 4
+          },
+          ranking: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["criterion", "score", "reason"],
+              properties: {
+                criterion: criterionLabel,
+                score: { type: "number", minimum: 0, maximum: 9 },
+                reason: { type: "string" }
+              }
+            },
+            minItems: 4,
+            maxItems: 4
+          }
         }
       },
       corrections: {
@@ -290,9 +353,55 @@ function normalizeAssessment(assessment) {
     keys.reduce((sum, key) => sum + Number(assessment.criteria[key].score || 0), 0) / keys.length;
   assessment.overallBand = roundBand(assessment.overallBand || average);
   assessment.confidence = assessment.confidence || "+/- 0.5";
+  assessment.criterionAnalysis = normalizeCriterionAnalysis(assessment);
   assessment.corrections = normalizeCorrections(assessment.corrections);
   assessment.generatedAt = new Date().toISOString();
   return assessment;
+}
+
+function normalizeCriterionAnalysis(assessment) {
+  const criteria = assessment.criteria || {};
+  const keys = ["TR", "CC", "LR", "GRA"];
+  const ranking = keys
+    .map(key => ({
+      criterion: key,
+      score: roundBand(criteria[key] && criteria[key].score),
+      reason: safeText(criteria[key] && criteria[key].summary, 260).trim()
+    }))
+    .sort((a, b) => a.score - b.score);
+
+  const existing = assessment.criterionAnalysis || {};
+  const weakestCriterion = safeCriterion(existing.weakestCriterion) || (ranking[0] && ranking[0].criterion) || "TR";
+  const weakestSubcriteria = Array.isArray(existing.weakestSubcriteria)
+    ? existing.weakestSubcriteria
+        .map(item => ({
+          criterion: safeCriterion(item && item.criterion) || weakestCriterion,
+          name: safeText(item && item.name, 120).trim(),
+          evidence: safeText(item && item.evidence, 320).trim(),
+          whyItHurts: safeText(item && item.whyItHurts, 420).trim(),
+          fix: safeText(item && item.fix, 420).trim()
+        }))
+        .filter(item => item.name && item.whyItHurts)
+        .slice(0, 4)
+    : [];
+
+  return {
+    summary: safeText(existing.summary, 600).trim() || "The lowest criterion needs the most urgent work.",
+    weakestCriterion,
+    weakestSubcriteria,
+    ranking: Array.isArray(existing.ranking) && existing.ranking.length === 4
+      ? existing.ranking.map(item => ({
+          criterion: safeCriterion(item && item.criterion) || "TR",
+          score: roundBand(item && item.score),
+          reason: safeText(item && item.reason, 260).trim()
+        }))
+      : ranking
+  };
+}
+
+function safeCriterion(value) {
+  const key = String(value || "").trim().toUpperCase();
+  return ["TR", "TA", "CC", "LR", "GRA"].includes(key) ? key : "";
 }
 
 function normalizeCorrections(corrections) {

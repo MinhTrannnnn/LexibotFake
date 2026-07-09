@@ -659,6 +659,40 @@ input[type="checkbox"] {
   font-weight: 850;
 }
 
+.criterion-analysis-card {
+  border-color: var(--accent);
+  background: #fffaf3;
+}
+
+.subcriterion-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin-left: 8px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: #4f5661;
+  background: #eef2f4;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.subcriterion-status.strong {
+  color: #087f32;
+  background: #dcfce7;
+}
+
+.subcriterion-status.mixed {
+  color: #8a4b00;
+  background: #fff3cd;
+}
+
+.subcriterion-status.weak {
+  color: var(--danger);
+  background: #ffe3e3;
+}
+
 .corrections-card del,
 .corrections-card ins {
   padding: 1px 4px;
