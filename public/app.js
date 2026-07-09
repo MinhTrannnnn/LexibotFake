@@ -158,7 +158,7 @@ async function handleSubmit(event) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         taskType: document.querySelector("#taskType").value,
-        aiLanguage: document.querySelector("#aiLanguage").value,
+        aiLanguage: "Vietnamese - Tieng Viet",
         prompt: promptInput.value,
         essay,
         aiReasoning: document.querySelector("#aiReasoning").checked,
@@ -451,7 +451,7 @@ async function askAiAboutCorrection(correctionIdValue) {
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        aiLanguage: document.querySelector("#aiLanguage").value,
+        aiLanguage: "Vietnamese - Tieng Viet",
         prompt: promptInput.value,
         essay: essayInput.value,
         correction: {

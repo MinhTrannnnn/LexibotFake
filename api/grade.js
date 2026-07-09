@@ -25,7 +25,7 @@ module.exports = async function handler(req, res) {
   try {
     const body = await readJson(req);
     const taskType = safeText(body.taskType || "IELTS Writing Task 2", 80);
-    const aiLanguage = safeText(body.aiLanguage || "Vietnamese - Tiếng Việt", 80);
+    const aiLanguage = "Vietnamese - Tiếng Việt";
     const prompt = safeText(body.prompt || "", 3000);
     const rawEssay = safeText(body.essay || "", 12000);
     const normalizedEssay = normalizeEssayInput(rawEssay);
@@ -135,7 +135,8 @@ function buildSystemPrompt(aiLanguage) {
     "For each of the four IELTS criteria, give criterion-specific feedback instead of generic advice. Mention concrete evidence from this essay and explain why that evidence affects the band.",
     "Break each criterion into its most relevant subcriteria and mark which subcriteria are strongest or weakest. Examples: position, idea development, prompt coverage, paragraphing, logical progression, referencing, vocabulary range, collocation, word form, sentence variety, agreement, tense, punctuation, and error density.",
     "Identify the single weakest IELTS criterion, then list the 2-4 weakest subcriteria inside it. The weakest criterion must be based on the score and the evidence, not on a generic preference.",
-    "Return practical feedback in the requested feedback language: " + aiLanguage + ".",
+    "Return all practical feedback in Vietnamese. This includes criterion titles, summaries, strengths, improvements, priority fixes, detailed feedback, word choice notes, weakest-subcriterion analysis, warnings, and correction reasons.",
+    "Use clear, natural Vietnamese for explanations. Keep technical IELTS labels such as TR, TA, CC, LR, and GRA when useful.",
     "Keep scores realistic. Use half-band increments from 0 to 9.",
     "For Task 1, label the first criterion as Task Achievement (TA). For Task 2, label it as Task Response (TR).",
     "If the prompt is missing, still assess the essay, but include a warning that task response accuracy is less certain.",

@@ -37,7 +37,7 @@ module.exports = async function handler(req, res) {
     const explanation = await explainCorrection({
       apiKey,
       model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-      aiLanguage: safeText(body.aiLanguage || "Vietnamese - Tiếng Việt", 80),
+      aiLanguage: "Vietnamese - Tiếng Việt",
       prompt: safeText(body.prompt || "", 2500),
       essay: safeText(body.essay || "", 12000),
       correction: {
@@ -71,7 +71,7 @@ async function explainCorrection({ apiKey, model, aiLanguage, prompt, essay, cor
           role: "system",
           content: [
             "You are a concise IELTS Writing tutor.",
-            "Explain only the requested correction, using the requested language.",
+            "Explain only the requested correction in Vietnamese.",
             "Be specific, practical, and student-friendly.",
             "Do not use markdown. Do not mention that you are an AI model."
           ].join("\n")
