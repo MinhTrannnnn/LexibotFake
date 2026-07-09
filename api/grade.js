@@ -136,6 +136,8 @@ function buildSystemPrompt(aiLanguage) {
     "Keep scores realistic. Use half-band increments from 0 to 9.",
     "For Task 1, label the first criterion as Task Achievement (TA). For Task 2, label it as Task Response (TR).",
     "If the prompt is missing, still assess the essay, but include a warning that task response accuracy is less certain.",
+    "Return inline corrections for the most important grammar, lexical, spelling, collocation, and cohesion issues. Each correction must quote a short exact substring from the essay in original and a concise replacement in suggestion.",
+    "Prefer corrections that can be found directly in the essay text. Do not invent corrections for text that is not present.",
     "Do not mention that you are an AI model. Do not include markdown."
   ].join("\n");
 }
@@ -165,6 +167,7 @@ function assessmentSchema() {
       "warnings",
       "diagnostics",
       "criteria",
+      "corrections",
       "priorityFixes",
       "detailedFeedback",
       "wordChoice",
@@ -198,6 +201,24 @@ function assessmentSchema() {
           LR: criterion,
           GRA: criterion
         }
+      },
+      corrections: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["original", "suggestion", "type", "reason"],
+          properties: {
+            original: { type: "string" },
+            suggestion: { type: "string" },
+            type: {
+              type: "string",
+              enum: ["grammar", "lexis", "cohesion", "task", "spelling", "punctuation"]
+            },
+            reason: { type: "string" }
+          }
+        },
+        maxItems: 16
       },
       priorityFixes: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 6 },
       detailedFeedback: {
@@ -269,8 +290,22 @@ function normalizeAssessment(assessment) {
     keys.reduce((sum, key) => sum + Number(assessment.criteria[key].score || 0), 0) / keys.length;
   assessment.overallBand = roundBand(assessment.overallBand || average);
   assessment.confidence = assessment.confidence || "+/- 0.5";
+  assessment.corrections = normalizeCorrections(assessment.corrections);
   assessment.generatedAt = new Date().toISOString();
   return assessment;
+}
+
+function normalizeCorrections(corrections) {
+  if (!Array.isArray(corrections)) return [];
+  return corrections
+    .map(item => ({
+      original: safeText(item && item.original, 180).trim(),
+      suggestion: safeText(item && item.suggestion, 180).trim(),
+      type: safeText(item && item.type, 24).trim() || "grammar",
+      reason: safeText(item && item.reason, 500).trim()
+    }))
+    .filter(item => item.original && item.suggestion && item.original !== item.suggestion)
+    .slice(0, 16);
 }
 
 function normalizeEssayInput(rawEssay) {

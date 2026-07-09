@@ -6,6 +6,10 @@ const scoreButton = document.querySelector("#scoreButton");
 const statusMessage = document.querySelector("#statusMessage");
 const timerButton = document.querySelector("#timerButton");
 const timerLabel = document.querySelector("#timerLabel");
+const acceptButton = document.querySelector("#acceptButton");
+const rejectButton = document.querySelector("#rejectButton");
+const correctionPreview = document.querySelector("#correctionPreview");
+const essayShell = document.querySelector(".essay-shell");
 
 const demoPrompt = `One of the consequences of improved medical care is that people are living longer and life expectancy is increasing.
 
@@ -21,6 +25,8 @@ In conclusion, although a longer life expectancy may place pressure on both fami
 
 let timerId = null;
 let timerSeconds = 40 * 60;
+let currentCorrections = [];
+let currentImprovedEssay = "";
 
 const els = {
   overallScore: document.querySelector("#overallScore"),
@@ -34,9 +40,15 @@ const els = {
 };
 
 updateWordCount();
+setCorrectionActions(false);
 
-essayInput.addEventListener("input", updateWordCount);
+essayInput.addEventListener("input", () => {
+  updateWordCount();
+  clearCorrectionPreview();
+});
 form.addEventListener("submit", handleSubmit);
+acceptButton.addEventListener("click", acceptCorrections);
+rejectButton.addEventListener("click", rejectCorrections);
 
 document.querySelector("#clearPromptButton").addEventListener("click", () => {
   promptInput.value = "";
@@ -139,6 +151,7 @@ async function handleSubmit(event) {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Không chấm được bài viết.");
     renderAssessment(payload);
+    renderCorrectionPreview(essay, payload);
     showStatus(
       `Đã chấm xong. Request ${payload.requestId || "mới"} · Essay ${payload.essayHash || "n/a"}.`,
       false
@@ -168,6 +181,7 @@ function renderAssessment(data) {
 
   const cards = [
     diagnosticsCard(data),
+    correctionsCard(data.corrections || []),
     criterionCard(els.trLabel.textContent, tr),
     criterionCard("CC", cc),
     criterionCard("LR", lr),
@@ -184,6 +198,148 @@ function renderAssessment(data) {
   }
 
   els.feedbackList.innerHTML = cards.join("");
+}
+
+function renderCorrectionPreview(essay, data) {
+  currentCorrections = buildCorrections(data);
+  currentImprovedEssay = String(data.improvedEssay || "").trim();
+
+  const matches = findCorrectionMatches(essay, currentCorrections);
+  if (!matches.length) {
+    const corrections = currentCorrections;
+    const improvedEssay = currentImprovedEssay;
+    clearCorrectionPreview();
+    currentCorrections = corrections;
+    currentImprovedEssay = improvedEssay;
+    setCorrectionActions(Boolean(currentImprovedEssay));
+    if (currentImprovedEssay) {
+      showStatus("Đã có bản Improved Essay. Bấm Accept All để thay bài hiện tại bằng bản sửa.", false);
+    }
+    return;
+  }
+
+  let html = "";
+  let cursor = 0;
+  matches.forEach((match, index) => {
+    html += escapeHtml(essay.slice(cursor, match.index));
+    html += `<del>${escapeHtml(match.original)}</del><ins>${escapeHtml(match.suggestion)}</ins>`;
+    html += `<span class="correction-note" title="${escapeHtml(match.reason || match.type)}">[${index + 1}]</span>`;
+    cursor = match.index + match.original.length;
+  });
+  html += escapeHtml(essay.slice(cursor));
+
+  correctionPreview.innerHTML = html;
+  correctionPreview.hidden = false;
+  essayShell.classList.add("has-corrections");
+  setCorrectionActions(true);
+}
+
+function buildCorrections(data) {
+  const inlineCorrections = Array.isArray(data.corrections) ? data.corrections : [];
+  const wordChoiceCorrections = Array.isArray(data.wordChoice)
+    ? data.wordChoice.map(item => ({
+        original: item.original,
+        suggestion: item.suggestion,
+        type: "lexis",
+        reason: item.reason
+      }))
+    : [];
+
+  return [...inlineCorrections, ...wordChoiceCorrections]
+    .map(item => ({
+      original: String(item.original || "").trim(),
+      suggestion: String(item.suggestion || "").trim(),
+      type: String(item.type || "grammar").trim(),
+      reason: String(item.reason || "").trim()
+    }))
+    .filter(item => item.original && item.suggestion && item.original !== item.suggestion)
+    .slice(0, 20);
+}
+
+function findCorrectionMatches(essay, corrections) {
+  const candidates = corrections
+    .map(item => ({
+      ...item,
+      index: essay.indexOf(item.original)
+    }))
+    .filter(item => item.index >= 0)
+    .sort((a, b) => a.index - b.index || b.original.length - a.original.length);
+
+  const matches = [];
+  for (const item of candidates) {
+    const end = item.index + item.original.length;
+    const overlaps = matches.some(match => item.index < match.index + match.original.length && end > match.index);
+    if (!overlaps) matches.push(item);
+  }
+  return matches.sort((a, b) => a.index - b.index);
+}
+
+function acceptCorrections() {
+  if (currentImprovedEssay) {
+    essayInput.value = currentImprovedEssay;
+  } else {
+    essayInput.value = applyCorrections(essayInput.value, currentCorrections);
+  }
+  updateWordCount();
+  clearCorrectionPreview();
+  showStatus("Đã áp dụng toàn bộ gợi ý sửa vào bài viết.", false);
+  essayInput.focus();
+}
+
+function rejectCorrections() {
+  clearCorrectionPreview();
+  showStatus("Đã bỏ qua các gợi ý sửa, bài viết gốc được giữ nguyên.", false);
+  essayInput.focus();
+}
+
+function applyCorrections(essay, corrections) {
+  const matches = findCorrectionMatches(essay, corrections);
+  return matches
+    .slice()
+    .reverse()
+    .reduce((text, match) => {
+      const start = match.index;
+      const end = start + match.original.length;
+      return `${text.slice(0, start)}${match.suggestion}${text.slice(end)}`;
+    }, essay);
+}
+
+function clearCorrectionPreview() {
+  currentCorrections = [];
+  currentImprovedEssay = "";
+  correctionPreview.hidden = true;
+  correctionPreview.innerHTML = "";
+  essayShell.classList.remove("has-corrections");
+  setCorrectionActions(false);
+}
+
+function setCorrectionActions(enabled) {
+  acceptButton.disabled = !enabled;
+  rejectButton.disabled = !enabled;
+}
+
+function correctionsCard(corrections) {
+  const items = buildCorrections({ corrections });
+  if (!items.length) return "";
+  return `
+    <article class="feedback-card corrections-card">
+      <h3>Inline Corrections</h3>
+      <ul>
+        ${items
+          .map(
+            item => `
+              <li>
+                <del>${escapeHtml(item.original)}</del>
+                <span> → </span>
+                <ins>${escapeHtml(item.suggestion)}</ins>
+                <p>${escapeHtml(item.reason || item.type)}</p>
+              </li>
+            `
+          )
+          .join("")}
+      </ul>
+    </article>
+  `;
 }
 
 function diagnosticsCard(data) {
