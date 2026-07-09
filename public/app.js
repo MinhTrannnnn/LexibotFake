@@ -206,14 +206,21 @@ function renderCorrectionPreview(essay, data) {
 
   const matches = findCorrectionMatches(essay, currentCorrections);
   if (!matches.length) {
-    const corrections = currentCorrections;
-    const improvedEssay = currentImprovedEssay;
-    clearCorrectionPreview();
-    currentCorrections = corrections;
-    currentImprovedEssay = improvedEssay;
-    setCorrectionActions(Boolean(currentImprovedEssay));
-    if (currentImprovedEssay) {
-      showStatus("Đã có bản Improved Essay. Bấm Accept All để thay bài hiện tại bằng bản sửa.", false);
+    if (currentImprovedEssay && currentImprovedEssay !== essay) {
+      correctionPreview.innerHTML = renderTextDiff(essay, currentImprovedEssay);
+      correctionPreview.hidden = false;
+      essayShell.classList.add("has-corrections");
+      setCorrectionActions(true);
+    } else {
+      const corrections = currentCorrections;
+      const improvedEssay = currentImprovedEssay;
+      clearCorrectionPreview();
+      currentCorrections = corrections;
+      currentImprovedEssay = improvedEssay;
+      setCorrectionActions(Boolean(currentImprovedEssay));
+      if (currentImprovedEssay) {
+        showStatus("Đã có bản Improved Essay. Bấm Accept All để thay bài hiện tại bằng bản sửa.", false);
+      }
     }
     return;
   }
@@ -302,6 +309,71 @@ function applyCorrections(essay, corrections) {
       const end = start + match.original.length;
       return `${text.slice(0, start)}${match.suggestion}${text.slice(end)}`;
     }, essay);
+}
+
+function renderTextDiff(original, revised) {
+  const originalTokens = tokenizeForDiff(original);
+  const revisedTokens = tokenizeForDiff(revised);
+  const table = buildDiffTable(originalTokens, revisedTokens);
+  const parts = [];
+  let originalIndex = 0;
+  let revisedIndex = 0;
+
+  while (originalIndex < originalTokens.length || revisedIndex < revisedTokens.length) {
+    if (
+      originalIndex < originalTokens.length &&
+      revisedIndex < revisedTokens.length &&
+      originalTokens[originalIndex] === revisedTokens[revisedIndex]
+    ) {
+      parts.push(escapeHtml(originalTokens[originalIndex]));
+      originalIndex += 1;
+      revisedIndex += 1;
+    } else if (
+      revisedIndex < revisedTokens.length &&
+      (originalIndex === originalTokens.length ||
+        table[originalIndex][revisedIndex + 1] >= table[originalIndex + 1][revisedIndex])
+    ) {
+      const insert = collectChangedTokens(revisedTokens, revisedIndex);
+      if (insert.text.trim()) parts.push(`<ins>${escapeHtml(insert.text)}</ins>`);
+      else parts.push(escapeHtml(insert.text));
+      revisedIndex = insert.nextIndex;
+    } else if (originalIndex < originalTokens.length) {
+      const deletion = collectChangedTokens(originalTokens, originalIndex);
+      if (deletion.text.trim()) parts.push(`<del>${escapeHtml(deletion.text)}</del>`);
+      else parts.push(escapeHtml(deletion.text));
+      originalIndex = deletion.nextIndex;
+    }
+  }
+
+  return parts.join("");
+}
+
+function tokenizeForDiff(text) {
+  return String(text || "").match(/\s+|[^\s]+/g) || [];
+}
+
+function buildDiffTable(originalTokens, revisedTokens) {
+  const table = Array.from({ length: originalTokens.length + 1 }, () =>
+    Array(revisedTokens.length + 1).fill(0)
+  );
+
+  for (let originalIndex = originalTokens.length - 1; originalIndex >= 0; originalIndex -= 1) {
+    for (let revisedIndex = revisedTokens.length - 1; revisedIndex >= 0; revisedIndex -= 1) {
+      table[originalIndex][revisedIndex] =
+        originalTokens[originalIndex] === revisedTokens[revisedIndex]
+          ? table[originalIndex + 1][revisedIndex + 1] + 1
+          : Math.max(table[originalIndex + 1][revisedIndex], table[originalIndex][revisedIndex + 1]);
+    }
+  }
+
+  return table;
+}
+
+function collectChangedTokens(tokens, startIndex) {
+  return {
+    text: tokens[startIndex] || "",
+    nextIndex: startIndex + 1
+  };
 }
 
 function clearCorrectionPreview() {
