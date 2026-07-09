@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LexiCheck Writing</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="LexiCheck Writing">
+        <span class="brand-mark">L</span>
+        <span>LexiCheck</span>
+      </a>
+      <div class="account">
+        <span class="avatar-icon" aria-hidden="true"></span>
+        <span>Writing checker</span>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="editor-pane" aria-label="Writing input">
+        <div class="hero-actions">
+          <button class="primary-tab" type="button">
+            <span class="icon checklist" aria-hidden="true"></span>
+            Check Score
+          </button>
+          <button class="square-button" id="settingsButton" type="button" title="Settings">
+            <span class="icon gear" aria-hidden="true"></span>
+          </button>
+        </div>
+
+        <div class="mode-row" aria-label="Mode">
+          <span>Mode:</span>
+          <div class="segmented" role="group">
+            <button class="active" type="button">Student</button>
+            <button type="button">Teacher</button>
+          </div>
+        </div>
+
+        <form id="checkerForm" class="checker-form">
+          <div class="field-grid">
+            <label>
+              <span>Task Type</span>
+              <select id="taskType" name="taskType">
+                <option>IELTS Writing Task 2</option>
+                <option>IELTS Writing Task 1</option>
+                <option>Academic Writing</option>
+                <option>General Training Letter</option>
+              </select>
+            </label>
+            <label>
+              <span>AI Language</span>
+              <select id="aiLanguage" name="aiLanguage">
+                <option>Vietnamese - Tiếng Việt</option>
+                <option>English</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="option-row">
+            <label><input type="checkbox" id="aiReasoning" checked> <span>AI Reasoning</span></label>
+            <label><input type="checkbox" id="improveWordChoice"> <span>Improve Word Choice</span></label>
+            <label><input type="checkbox" id="detailedFeedback" checked> <span>Detailed Feedback</span></label>
+            <label><input type="checkbox" id="sampleEssays" checked> <span>Sample Essays</span></label>
+          </div>
+
+          <label class="prompt-box">
+            <span class="sr-only">Đề bài</span>
+            <textarea id="prompt" name="prompt" rows="4" placeholder="Dán đề bài IELTS Writing vào đây..."></textarea>
+            <div class="prompt-tools">
+              <button type="button" id="outlineButton" title="Outline"><span class="icon list" aria-hidden="true"></span> Outline</button>
+              <button type="button" id="vocabButton" title="Vocabulary"><span class="icon search" aria-hidden="true"></span> Vocabulary</button>
+              <button type="button" id="demoButton" title="Load demo"><span class="icon copy" aria-hidden="true"></span> Demo</button>
+              <button type="button" id="clearPromptButton" title="Clear prompt"><span class="icon eraser" aria-hidden="true"></span> Clear</button>
+            </div>
+          </label>
+
+          <div class="essay-toolbar">
+            <button type="button" id="acceptButton" disabled><span class="icon check" aria-hidden="true"></span> Accept All</button>
+            <button type="button" id="rejectButton" disabled><span class="icon xmark" aria-hidden="true"></span> Reject All</button>
+            <button type="button" id="timerButton"><span class="icon timer" aria-hidden="true"></span> <span id="timerLabel">Timer</span></button>
+            <button type="button" id="copyButton"><span class="icon copy" aria-hidden="true"></span> Copy</button>
+            <button type="button" id="pasteButton"><span class="icon paste" aria-hidden="true"></span> Paste</button>
+            <button type="button" id="clearEssayButton"><span class="icon eraser" aria-hidden="true"></span> Clear</button>
+          </div>
+
+          <div class="essay-shell">
+            <div class="undo-row" aria-hidden="true">
+              <span class="icon undo"></span>
+              <span class="icon redo muted"></span>
+            </div>
+            <textarea id="essay" name="essay" spellcheck="true" placeholder="Dán bài viết của bạn vào đây rồi bấm Check Writing Score..."></textarea>
+          </div>
+
+          <div class="bottom-actions">
+            <div class="word-counter"><span id="wordCount">0</span> words</div>
+            <button class="score-button" id="scoreButton" type="submit">
+              <span class="icon sparkle" aria-hidden="true"></span>
+              Check Writing Score
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="analysis-pane" aria-label="AI analysis">
+        <div class="panel-top">
+          <div class="plan">FREE <span></span> 14 LC / 13 LC</div>
+          <div class="window-actions">
+            <button type="button" title="Fullscreen"><span class="icon fullscreen" aria-hidden="true"></span></button>
+            <button type="button" title="Close"><span class="icon close" aria-hidden="true"></span></button>
+          </div>
+        </div>
+
+        <div class="analysis-tabs" role="tablist" aria-label="Result views">
+          <button class="active" type="button"><span class="icon analysis" aria-hidden="true"></span> AI Analysis</button>
+          <button type="button"><span class="icon chat" aria-hidden="true"></span> Chat with AI</button>
+          <button type="button"><span class="icon writing" aria-hidden="true"></span> Writing Assist</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <div id="statusMessage" class="status-message" hidden></div>
+
+        <section class="score-card">
+          <h1>Est. Overall Band Score</h1>
+          <div class="overall-score" id="overallScore">0</div>
+          <p id="confidence">(+/- 0.5)</p>
+        </section>
+
+        <section class="mini-scores" aria-label="IELTS criteria">
+          <article>
+            <h2 id="trLabel">TR</h2>
+            <strong id="trScore">0</strong>
+          </article>
+          <article>
+            <h2>CC</h2>
+            <strong id="ccScore">0</strong>
+          </article>
+          <article>
+            <h2>LR</h2>
+            <strong id="lrScore">0</strong>
+          </article>
+          <article>
+            <h2>GRA</h2>
+            <strong id="graScore">0</strong>
+          </article>
+        </section>
+
+        <div id="feedbackList" class="feedback-list">
+          <article class="feedback-card empty-card">
+            <h3>Task Response (TR): 0</h3>
+            <p>Nhập bài viết rồi bấm Check Writing Score để nhận điểm, phân tích 4 tiêu chí IELTS, lỗi ưu tiên và bài mẫu.</p>
+          </article>
+        </div>
+
+        <div class="bug-box">
+          <span class="icon pencil" aria-hidden="true"></span>
+          Help us improve this feature - <button type="button">Report a bug</button>
+        </div>
+      </aside>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

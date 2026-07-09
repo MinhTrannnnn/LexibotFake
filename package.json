@@ -1,0 +1,13 @@
+{
+  "name": "lexicheck-writing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "IELTS writing checker powered by OpenAI, deployable to Vercel.",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
