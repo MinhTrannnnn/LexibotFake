@@ -10,6 +10,11 @@ const acceptButton = document.querySelector("#acceptButton");
 const rejectButton = document.querySelector("#rejectButton");
 const correctionPreview = document.querySelector("#correctionPreview");
 const essayShell = document.querySelector(".essay-shell");
+const correctionPopover = document.createElement("div");
+
+correctionPopover.className = "correction-popover";
+correctionPopover.hidden = true;
+essayShell.appendChild(correctionPopover);
 
 const demoPrompt = `One of the consequences of improved medical care is that people are living longer and life expectancy is increasing.
 
@@ -26,7 +31,9 @@ In conclusion, although a longer life expectancy may place pressure on both fami
 let timerId = null;
 let timerSeconds = 40 * 60;
 let currentCorrections = [];
+let currentCorrectionMatches = [];
 let currentImprovedEssay = "";
+let activeCorrectionId = "";
 
 const els = {
   overallScore: document.querySelector("#overallScore"),
@@ -49,6 +56,19 @@ essayInput.addEventListener("input", () => {
 form.addEventListener("submit", handleSubmit);
 acceptButton.addEventListener("click", acceptCorrections);
 rejectButton.addEventListener("click", rejectCorrections);
+correctionPreview.addEventListener("click", handleCorrectionPreviewClick);
+correctionPreview.addEventListener("keydown", handleCorrectionPreviewKeydown);
+correctionPopover.addEventListener("click", handleCorrectionPopoverClick);
+document.addEventListener("click", event => {
+  if (
+    correctionPopover.hidden ||
+    correctionPopover.contains(event.target) ||
+    event.target.closest(".correction-token")
+  ) {
+    return;
+  }
+  hideCorrectionPopover();
+});
 
 document.querySelector("#clearPromptButton").addEventListener("click", () => {
   promptInput.value = "";
@@ -204,8 +224,11 @@ function renderAssessment(data) {
 function renderCorrectionPreview(essay, data) {
   currentCorrections = buildCorrections(data);
   currentImprovedEssay = String(data.improvedEssay || "").trim();
+  currentCorrectionMatches = [];
+  hideCorrectionPopover();
 
   const matches = findCorrectionMatches(essay, currentCorrections);
+  currentCorrectionMatches = matches;
   if (!matches.length) {
     if (currentImprovedEssay && currentImprovedEssay !== essay) {
       correctionPreview.innerHTML = renderTextDiff(essay, currentImprovedEssay);
@@ -230,8 +253,11 @@ function renderCorrectionPreview(essay, data) {
   let cursor = 0;
   matches.forEach((match, index) => {
     html += escapeHtml(essay.slice(cursor, match.index));
-    html += `<del>${escapeHtml(match.original)}</del><ins>${escapeHtml(match.suggestion)}</ins>`;
-    html += `<span class="correction-note" title="${escapeHtml(match.reason || match.type)}">[${index + 1}]</span>`;
+    html += `
+      <span class="correction-token" role="button" tabindex="0" data-correction-id="${escapeHtml(match.id)}" aria-label="Xem gợi ý sửa lỗi ${index + 1}">
+        <del>${escapeHtml(match.original)}</del><ins>${escapeHtml(match.suggestion)}</ins>
+        <span class="correction-note" title="${escapeHtml(match.reason || match.type)}">[${index + 1}]</span>
+      </span>`;
     cursor = match.index + match.original.length;
   });
   html += escapeHtml(essay.slice(cursor));
@@ -254,7 +280,8 @@ function buildCorrections(data) {
     : [];
 
   return [...inlineCorrections, ...wordChoiceCorrections]
-    .map(item => ({
+    .map((item, index) => ({
+      id: item.id || correctionId(item, index),
       original: String(item.original || "").trim(),
       suggestion: String(item.suggestion || "").trim(),
       type: String(item.type || "grammar").trim(),
@@ -262,6 +289,16 @@ function buildCorrections(data) {
     }))
     .filter(item => item.original && item.suggestion && item.original !== item.suggestion)
     .slice(0, 20);
+}
+
+function correctionId(item, index) {
+  const source = [item.original, item.suggestion, item.type, item.reason, index].join("|");
+  let hash = 2166136261;
+  for (let i = 0; i < source.length; i += 1) {
+    hash ^= source.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `correction-${(hash >>> 0).toString(16)}`;
 }
 
 function findCorrectionMatches(essay, corrections) {
@@ -298,6 +335,160 @@ function rejectCorrections() {
   clearCorrectionPreview();
   showStatus("Đã bỏ qua các gợi ý sửa, bài viết gốc được giữ nguyên.", false);
   essayInput.focus();
+}
+
+function handleCorrectionPreviewClick(event) {
+  const token = event.target.closest(".correction-token");
+  if (!token || !correctionPreview.contains(token)) return;
+  event.stopPropagation();
+  showCorrectionPopover(token.dataset.correctionId, token);
+}
+
+function handleCorrectionPreviewKeydown(event) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const token = event.target.closest(".correction-token");
+  if (!token || !correctionPreview.contains(token)) return;
+  event.preventDefault();
+  showCorrectionPopover(token.dataset.correctionId, token);
+}
+
+function handleCorrectionPopoverClick(event) {
+  const action = event.target.dataset.action;
+  if (!action || !activeCorrectionId) return;
+
+  if (action === "accept") {
+    acceptSingleCorrection(activeCorrectionId);
+  } else if (action === "reject") {
+    rejectSingleCorrection(activeCorrectionId);
+  } else if (action === "ask") {
+    askAiAboutCorrection(activeCorrectionId);
+  }
+}
+
+function showCorrectionPopover(correctionIdValue, target) {
+  const match = currentCorrectionMatches.find(item => item.id === correctionIdValue);
+  if (!match) return;
+
+  activeCorrectionId = correctionIdValue;
+  renderCorrectionPopover(match);
+  correctionPopover.hidden = false;
+
+  const shellRect = essayShell.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const top = targetRect.bottom - shellRect.top + essayShell.scrollTop + 10;
+  const preferredLeft = targetRect.left - shellRect.left + essayShell.scrollLeft;
+  const maxLeft = Math.max(12, essayShell.clientWidth - correctionPopover.offsetWidth - 12);
+  correctionPopover.style.top = `${top}px`;
+  correctionPopover.style.left = `${Math.min(Math.max(12, preferredLeft), maxLeft)}px`;
+}
+
+function renderCorrectionPopover(match) {
+  const context = correctionContext(essayInput.value, match);
+  correctionPopover.innerHTML = `
+    <div class="correction-popover-context">
+      <span>${escapeHtml(context.before)}</span><del>${escapeHtml(match.original)}</del><ins>${escapeHtml(
+        match.suggestion
+      )}</ins><span>${escapeHtml(context.after)}</span>
+    </div>
+    <p class="correction-popover-type">${escapeHtml(correctionTypeLabel(match.type))}</p>
+    <p>${escapeHtml(match.reason || "Gợi ý này giúp câu tự nhiên và chính xác hơn.")}</p>
+    ${match.aiExplanation ? `<p class="correction-popover-ai">${escapeHtml(match.aiExplanation)}</p>` : ""}
+    <div class="correction-popover-actions">
+      <button type="button" class="accept-one" data-action="accept">✓ Accept</button>
+      <button type="button" class="reject-one" data-action="reject">× Reject</button>
+      <button type="button" class="ask-one" data-action="ask">${match.aiLoading ? "Asking..." : "✦ Ask AI"}</button>
+    </div>
+  `;
+}
+
+function correctionContext(text, match) {
+  const start = Math.max(0, match.index - 58);
+  const end = Math.min(text.length, match.index + match.original.length + 58);
+  return {
+    before: `${start > 0 ? "..." : ""}${text.slice(start, match.index)}`,
+    after: `${text.slice(match.index + match.original.length, end)}${end < text.length ? "..." : ""}`
+  };
+}
+
+function acceptSingleCorrection(correctionIdValue) {
+  const match = currentCorrectionMatches.find(item => item.id === correctionIdValue);
+  if (!match) return;
+
+  const essay = essayInput.value;
+  if (essay.slice(match.index, match.index + match.original.length) !== match.original) {
+    hideCorrectionPopover();
+    renderCorrectionPreview(essay, { corrections: currentCorrections });
+    return;
+  }
+
+  essayInput.value = `${essay.slice(0, match.index)}${match.suggestion}${essay.slice(
+    match.index + match.original.length
+  )}`;
+  currentCorrections = currentCorrections.filter(item => item.id !== correctionIdValue);
+  updateWordCount();
+  hideCorrectionPopover();
+  renderCorrectionPreview(essayInput.value, { corrections: currentCorrections });
+  showStatus("Đã áp dụng gợi ý sửa lỗi này.", false);
+}
+
+function rejectSingleCorrection(correctionIdValue) {
+  currentCorrections = currentCorrections.filter(item => item.id !== correctionIdValue);
+  hideCorrectionPopover();
+  renderCorrectionPreview(essayInput.value, { corrections: currentCorrections });
+  showStatus("Đã bỏ qua gợi ý sửa lỗi này.", false);
+}
+
+async function askAiAboutCorrection(correctionIdValue) {
+  const match = currentCorrectionMatches.find(item => item.id === correctionIdValue);
+  if (!match || match.aiLoading) return;
+
+  match.aiLoading = true;
+  renderCorrectionPopover(match);
+
+  try {
+    const response = await fetch("/api/explain-correction", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        aiLanguage: document.querySelector("#aiLanguage").value,
+        prompt: promptInput.value,
+        essay: essayInput.value,
+        correction: {
+          original: match.original,
+          suggestion: match.suggestion,
+          type: match.type,
+          reason: match.reason
+        }
+      })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Không giải thích được lỗi này.");
+    match.aiExplanation = payload.explanation || "";
+  } catch (error) {
+    match.aiExplanation = error.message || "Có lỗi khi hỏi AI.";
+  } finally {
+    match.aiLoading = false;
+    renderCorrectionPopover(match);
+  }
+}
+
+function hideCorrectionPopover() {
+  activeCorrectionId = "";
+  correctionPopover.hidden = true;
+  correctionPopover.innerHTML = "";
+}
+
+function correctionTypeLabel(type) {
+  const labels = {
+    grammar: "Grammar",
+    lexis: "Vocabulary",
+    cohesion: "Cohesion",
+    task: "Task response",
+    spelling: "Spelling",
+    punctuation: "Punctuation"
+  };
+  return labels[type] || "Correction";
 }
 
 function applyCorrections(essay, corrections) {
@@ -379,7 +570,9 @@ function collectChangedTokens(tokens, startIndex) {
 
 function clearCorrectionPreview() {
   currentCorrections = [];
+  currentCorrectionMatches = [];
   currentImprovedEssay = "";
+  hideCorrectionPopover();
   correctionPreview.hidden = true;
   correctionPreview.innerHTML = "";
   essayShell.classList.remove("has-corrections");

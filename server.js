@@ -2,6 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const gradeHandler = require("./api/grade");
+const explainCorrectionHandler = require("./api/explain-correction");
 
 loadLocalEnv();
 
@@ -22,6 +23,11 @@ const types = {
 const server = http.createServer(async (req, res) => {
   if (req.url && req.url.startsWith("/api/grade")) {
     await gradeHandler(req, res);
+    return;
+  }
+
+  if (req.url && req.url.startsWith("/api/explain-correction")) {
+    await explainCorrectionHandler(req, res);
     return;
   }
 
